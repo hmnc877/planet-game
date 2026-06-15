@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>惑星ゲーム 完全版</title>
+
+<style>
+body{
+  margin:0;
+  background:#050816;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+  touch-action:none;
+}
+
+#container{
+  position:relative;
+}
+
+canvas{
+  width:min(100vw,450px);
+  background:linear-gradient(#02030a,#0b1030);
+  display:block;
+  touch-action:none;
+}
+
+#ui{
+  position:absolute;
+  top:10px;
+  left:10px;
+  color:white;
+  font-family:sans-serif;
+  background:rgba(0,0,0,0.4);
+  padding:8px;
+  border-radius:10px;
+}
+
+#preview{
+  width:45px;
+  height:45px;
+  border-radius:50%;
+  margin-top:5px;
+  border:2px solid white;
+  background-size:cover;
+}
+</style>
+</head>
+
+<body>
+
+<div id="container">
+
+<div id="ui">
+  <div id="score">Score: 0</div>
+  <div id="next">次:</div>
+  <div id="preview"></div>
+</div>
+
+<canvas id="game"></canvas>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = 450;
+canvas.height = 700;
+
+const GAMEOVER_LINE = 180;
+
+/* 惑星 */
+const planets = [
+ {name:"月", r:25, img:"assets/moon.png"},
+ {name:"火星", r:32, img:"assets/mars.png"},
+ {name:"地球", r:40, img:"assets/earth.png"},
+ {name:"海王星", r:48, img:"assets/neptune.png"},
+ {name:"土星", r:58, img:"assets/saturn.png"},
+ {name:"木星", r:70, img:"assets/jupiter.png"},
+ {name:"太陽", r:85, img:"assets/sun.png"},
+ {name:"リゲル", r:95, img:"assets/rigel.png"}
+];
+
+/* 画像ロード */
+const images = planets.map(p=>{
+ const img = new Image();
+ img.src = p.img;
+ return img;
+});
+
+let balls = [];
+let nextType = 0;
+let score = 0;
+
+/* UI */
+function updateUI(){
+ document.getElementById("score").innerText = "Score: " + score;
+ document.getElementById("next").innerText = "次: " + planets[nextType].name;
+ document.getElementById("preview").style.backgroundImage =
+ `url(${planets[nextType].img})`;
+}
+
+/* =========================
+   ボール
+========================= */
+class Ball{
+
+ constructor(x,y,type){
+  this.x=x;
+  this.y=y;
+  this.type=type;
+  this.r=planets[type].r;
+
+  this.vx=(Math.random()-0.5)*0.6;
+  this.vy=0;
+
+  this.isRigel = planets[type].name === "リゲル";
+  this.life = this.isRigel ? 180 : -1;
+ }
+
+ update(){
+
+  this.vy += 0.22;
+
+  this.x += this.vx;
+  this.y += this.vy;
+
+  this.vx *= 0.99;
+  this.vy *= 0.99;
+
+  /* 壁 */
+  if(this.x-this.r<0){
+    this.x=this.r;
+    this.vx *= -0.3;
+  }
+
+  if(this.x+this.r>canvas.width){
+    this.x=canvas.width-this.r;
+    this.vx *= -0.3;
+  }
+
+  /* 底 */
+  if(this.y+this.r>canvas.height){
+    this.y=canvas.height-this.r;
+    this.vy *= -0.2;
+  }
+
+  /* リゲル爆発 */
+  if(this.isRigel){
+    this.life--;
+    if(this.life<=0){
+      this.dead = true;
+      createExplosion(this.x,this.y);
+    }
+  }
+ }
+
+ draw(){
+
+  const img = images[this.type];
+
+  ctx.save();
+  ctx.translate(this.x,this.y);
+
+  ctx.beginPath();
+  ctx.arc(0,0,this.r,0,Math.PI*2);
+  ctx.clip();
+
+  ctx.drawImage(img,-this.r,-this.r,this.r*2,this.r*2);
+
+  ctx.restore();
+ }
+}
+
+/* =========================
+   爆発
+========================= */
+let particles = [];
+
+function createExplosion(x,y){
+ for(let i=0;i<20;i++){
+  particles.push({
+   x,y,
+   vx:(Math.random()-0.5)*4,
+   vy:(Math.random()-0.5)*4,
+   life:25
+  });
+ }
+}
+
+function updateParticles(){
+ for(let i=particles.length-1;i>=0;i--){
+  let p=particles[i];
+  p.x+=p.vx;
+  p.y+=p.vy;
+  p.life--;
+  if(p.life<=0) particles.splice(i,1);
+ }
+}
+
+function drawParticles(){
+ ctx.fillStyle="white";
+ particles.forEach(p=>{
+  ctx.fillRect(p.x,p.y,2,2);
+ });
+}
+
+/* =========================
+   落下
+========================= */
+function drop(x){
+ balls.push(new Ball(x,80,nextType));
+
+ nextType = Math.floor(Math.random()*3);
+
+ updateUI();
+}
+
+/* =========================
+   入力（スマホ対応）
+========================= */
+function getX(e){
+ const r = canvas.getBoundingClientRect();
+ return (e.clientX - r.left) * (canvas.width / r.width);
+}
+
+canvas.addEventListener("click",e=>{
+ drop(getX(e));
+});
+
+canvas.addEventListener("touchstart",e=>{
+ const t = e.touches[0];
+ const r = canvas.getBoundingClientRect();
+
+ const x = (t.clientX - r.left) * (canvas.width / r.width);
+ drop(x);
+});
+
+/* =========================
+   合体
+========================= */
+function merge(){
+
+ for(let i=0;i<balls.length;i++){
+ for(let j=i+1;j<balls.length;j++){
+
+ const a=balls[i];
+ const b=balls[j];
+
+ const dx=a.x-b.x;
+ const dy=a.y-b.y;
+ const dist=Math.sqrt(dx*dx+dy*dy);
+ const min=a.r+b.r;
+
+ if(dist<min){
+
+  const angle=Math.atan2(dy,dx);
+  const overlap=(min-dist)*0.5;
+
+  a.x+=Math.cos(angle)*overlap;
+  a.y+=Math.sin(angle)*overlap;
+
+  b.x-=Math.cos(angle)*overlap;
+  b.y-=Math.sin(angle)*overlap;
+
+  if(a.type===b.type){
+
+    balls.splice(j,1);
+    balls.splice(i,1);
+
+    balls.push(new Ball(
+      (a.x+b.x)/2,
+      (a.y+b.y)/2,
+      a.type+1
+    ));
+
+    score += (a.type+1)*10;
+    updateUI();
+    return;
+  }
+ }
+ }
+ }
+}
+
+/* =========================
+   赤い線
+========================= */
+function drawLine(){
+ ctx.strokeStyle="red";
+ ctx.lineWidth=2;
+ ctx.beginPath();
+ ctx.moveTo(0,GAMEOVER_LINE);
+ ctx.lineTo(canvas.width,GAMEOVER_LINE);
+ ctx.stroke();
+}
+
+/* =========================
+   ループ
+========================= */
+function loop(){
+
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ drawLine();
+
+ balls.forEach(b=>{
+  b.update();
+  b.draw();
+ });
+
+ merge();
+
+ updateParticles();
+ drawParticles();
+
+ balls = balls.filter(b=>!b.dead);
+
+ requestAnimationFrame(loop);
+}
+
+/* =========================
+   初期化
+========================= */
+updateUI();
+loop();
+
+</script>
+
+</body>
+</html>
