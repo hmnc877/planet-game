@@ -9,10 +9,7 @@
 body{
   margin:0;
   background:#050816;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  height:100vh;
+  overflow:hidden;
   touch-action:none;
 }
 
@@ -21,10 +18,10 @@ body{
 }
 
 canvas{
-  width:min(100vw,450px);
-  background:linear-gradient(#02030a,#0b1030);
+  width:100vw;
+  height:100vh;
   display:block;
-  touch-action:none;
+  background:linear-gradient(#02030a,#0b1030);
 }
 
 #ui{
@@ -68,8 +65,15 @@ canvas{
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-canvas.width = 450;
-canvas.height = 700;
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+window.addEventListener("resize",()=>{
+
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+});
 
 const GAMEOVER_LINE = 180;
 
